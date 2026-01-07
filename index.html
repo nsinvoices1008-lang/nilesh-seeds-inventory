@@ -32,12 +32,15 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.3s; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
         .content-header h2 { font-size: 24px; font-weight: 700; }
+        .header-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
         .btn-primary, .btn-secondary { padding: 12px 24px; border: none; border-radius: 10px; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; gap: 8px; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); }
         .btn-secondary { background: var(--bg); color: var(--text); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #059669; transform: translateY(-2px); }
         .search-container { position: relative; margin-bottom: 24px; }
         .search-container i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); }
         #searchInput { width: 100%; padding: 14px 50px; border: 2px solid var(--border); border-radius: 12px; font-size: 15px; transition: all 0.3s; }
@@ -117,6 +120,11 @@
         .empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
         .empty-state i { font-size: 64px; margin-bottom: 16px; opacity: 0.5; }
         .empty-state h3 { font-size: 20px; margin-bottom: 8px; }
+        .sync-info { background: #dbeafe; border-left: 4px solid var(--primary); padding: 16px; border-radius: 8px; margin-bottom: 24px; }
+        .sync-info h4 { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--primary); }
+        .sync-info p { font-size: 14px; color: var(--text); margin-bottom: 8px; }
+        .sync-info a { color: var(--primary); text-decoration: none; font-weight: 500; }
+        .sync-info a:hover { text-decoration: underline; }
         @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @media (max-width: 768px) {
             .container { padding: 12px; }
@@ -127,6 +135,8 @@
             .form-grid { grid-template-columns: 1fr; }
             .notification-panel { width: 100%; right: -100%; }
             .reports-grid { grid-template-columns: 1fr; }
+            .header-buttons { width: 100%; }
+            .header-buttons button { flex: 1; }
         }
     </style>
 </head>
@@ -143,8 +153,8 @@
                         <i class="fas fa-bell"></i>
                         <span class="notification-badge" id="notificationCount">0</span>
                     </button>
-                    <button class="btn-icon" id="syncBtn" title="Sync">
-                        <i class="fas fa-sync-alt"></i>
+                    <button class="btn-icon" id="syncBtn" title="Export to CSV">
+                        <i class="fas fa-download"></i>
                     </button>
                 </div>
             </div>
@@ -164,11 +174,26 @@
 
         <main class="main-content">
             <div class="tab-content active" id="products-tab">
+                <div class="sync-info">
+                    <h4><i class="fas fa-info-circle"></i> Google Sheets Integration</h4>
+                    <p>Your Google Sheet: <a href="https://docs.google.com/spreadsheets/d/1GAuG2cBtsWfy5zi_c--DcXt8bWdu6iWF2ZU7UWR4Woo/edit" target="_blank">Open Sheet</a></p>
+                    <p>Use the buttons below to sync your data with Google Sheets</p>
+                </div>
+
                 <div class="content-header">
                     <h2>Product Management</h2>
-                    <button class="btn-primary" id="addProductBtn">
-                        <i class="fas fa-plus"></i> Add Product
-                    </button>
+                    <div class="header-buttons">
+                        <button class="btn-primary" id="addProductBtn">
+                            <i class="fas fa-plus"></i> Add Product
+                        </button>
+                        <button class="btn-success" id="exportBtn">
+                            <i class="fas fa-file-export"></i> Export CSV
+                        </button>
+                        <button class="btn-secondary" id="importBtn">
+                            <i class="fas fa-file-import"></i> Import CSV
+                        </button>
+                        <input type="file" id="fileInput" accept=".csv" style="display: none;">
+                    </div>
                 </div>
 
                 <div class="search-container">
@@ -392,7 +417,10 @@
             document.getElementById('productType').addEventListener('change', handleProductTypeChange);
             document.getElementById('searchInput').addEventListener('input', handleSearch);
             document.getElementById('clearSearchBtn').addEventListener('click', clearSearch);
-            document.getElementById('syncBtn').addEventListener('click', syncData);
+            document.getElementById('syncBtn').addEventListener('click', exportToCSV);
+            document.getElementById('exportBtn').addEventListener('click', exportToCSV);
+            document.getElementById('importBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+            document.getElementById('fileInput').addEventListener('change', importFromCSV);
             document.getElementById('notificationBtn').addEventListener('click', toggleNotificationPanel);
             document.getElementById('closeNotificationBtn').addEventListener('click', toggleNotificationPanel);
             document.getElementById('productModal').addEventListener('click', (e) => {
@@ -474,10 +502,10 @@
 
             if (currentEditingProduct) {
                 products[currentEditingProduct.index] = product;
-                showToast('Product updated!', 'success');
+                showToast('Product updated! Click Export CSV to sync with Google Sheets', 'success');
             } else {
                 products.push(product);
-                showToast('Product added!', 'success');
+                showToast('Product added! Click Export CSV to sync with Google Sheets', 'success');
             }
 
             saveProducts();
@@ -499,6 +527,74 @@
 
         function saveProducts() {
             localStorage.setItem('nileshProducts', JSON.stringify(products));
+        }
+
+        function exportToCSV() {
+            const headers = ['Product Name', 'Company Name', 'Batch Number', 'Manufacturing Date', 'Net Content', 'Product Type', 'T/F or C/F', 'Expiry Date', 'Available Stock', 'Cash Rate', 'Credit Rate', 'Last Updated', 'Product ID'];
+            const rows = products.map(p => [
+                p.name, p.company, p.batch, p.mfgDate, p.netContent, p.type, p.tfcf, p.expiryDate, p.stock, p.cashRate, p.creditRate, p.lastUpdated, p.id
+            ]);
+            
+            let csv = headers.join(',') + '\\n';
+            rows.forEach(row => {
+                csv += row.map(cell => `"${cell}"`).join(',') + '\\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `nilesh-seeds-inventory-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+            
+            showToast('CSV exported! Import this file to your Google Sheet', 'success');
+        }
+
+        function importFromCSV(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const csv = event.target.result;
+                const lines = csv.split('\\n');
+                const imported = [];
+
+                for (let i = 1; i < lines.length; i++) {
+                    if (!lines[i].trim()) continue;
+                    
+                    const values = lines[i].match(/(".*?"|[^",\\s]+)(?=\\s*,|\\s*$)/g);
+                    if (!values || values.length < 13) continue;
+
+                    const clean = values.map(v => v.replace(/^"|"$/g, ''));
+                    imported.push({
+                        name: clean[0],
+                        company: clean[1],
+                        batch: clean[2],
+                        mfgDate: clean[3],
+                        netContent: clean[4],
+                        type: clean[5],
+                        tfcf: clean[6],
+                        expiryDate: clean[7],
+                        stock: parseFloat(clean[8]),
+                        cashRate: parseFloat(clean[9]),
+                        creditRate: parseFloat(clean[10]),
+                        lastUpdated: clean[11],
+                        id: clean[12]
+                    });
+                }
+
+                if (imported.length > 0) {
+                    products = imported;
+                    saveProducts();
+                    renderProducts();
+                    updateDashboard();
+                    showToast(`${imported.length} products imported successfully!`, 'success');
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
         }
 
         function renderProducts(filtered = null) {
@@ -670,16 +766,6 @@
         function updateDashboard() {
             updateReminders();
             updateReports();
-        }
-
-        function syncData() {
-            const btn = document.getElementById('syncBtn');
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            setTimeout(() => {
-                btn.innerHTML = '<i class="fas fa-check"></i>';
-                showToast('Synced successfully!', 'success');
-                setTimeout(() => btn.innerHTML = '<i class="fas fa-sync-alt"></i>', 2000);
-            }, 1000);
         }
 
         function showToast(msg, type = 'info') {
